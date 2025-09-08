@@ -1,41 +1,68 @@
+# نام ورک‌فلو که در تب Actions گیت‌هاب نمایش داده می‌شود
 name: Collector Auto Update
 
 on:
+  # ۱. اجرا بر اساس زمان‌بندی مشخص
+  schedule:
+    # هر ۳۰ دقیقه یک‌بار اجرا می‌شود (در دقایق ۰ و ۳۰ هر ساعت)
+    - cron: '*/30 * * * *'
+
+  # ۲. اجرا در زمان پوش کردن تغییرات در برنچ main
   push:
     branches:
       - main
-  schedule:
-    - cron: '*/30 * * * *'  # هر نیم ساعت اجرا میشه
+    paths:
+      # این بخش بهینه شده است: ورک‌فلو فقط زمانی با پوش اجرا می‌شود که
+      # خود اسکریپت یا فایل سورس‌ها تغییر کرده باشد تا از اجرای بیهوده جلوگیری شود.
+      - 'config_collector.py'
+      - 'text/sample_sources.txt' # مسیر فایل سورس‌ها را در صورت نیاز تغییر دهید
+
+  # ۳. امکان اجرای دستی از طریق صفحه Actions گیت‌هاب
+  # این گزینه برای تست و دیباگ بسیار مفید است.
+  workflow_dispatch:
 
 jobs:
-  build:
+  # نام جاب را به چیزی توصیفی‌تر تغییر می‌دهیم
+  update-configs:
+    # اجرا روی آخرین نسخه اوبونتو
     runs-on: ubuntu-latest
 
     steps:
+    # مرحله ۱: دریافت کد از ریپازیتوری
     - name: Checkout Repository
-      uses: actions/checkout@v3
-      with:
-        persist-credentials: true
+      # استفاده از آخرین نسخه پایدار اکشن
+      uses: actions/checkout@v4
 
+    # مرحله ۲: راه‌اندازی پایتون
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        # کش کردن پکیج‌ها برای افزایش سرعت در اجراهای بعدی
+        cache: 'pip'
 
+    # مرحله ۳: نصب کتابخانه‌های مورد نیاز پایتون
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install requests
 
-    - name: Run Collector
-      run: |
-        python collector.py
+    # مرحله ۴: اجرای اسکریپت اصلی برای جمع‌آوری کانفیگ‌ها
+    - name: Run Python Collector Script
+      # نام اسکریپت با فایل پایتون جدید هماهنگ شده است
+      run: python config_collector.py
 
-    - name: Commit and Push Output
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add -f output/*
-        git commit -m "Update collector output [skip ci]" || echo "No changes to commit"
-        git push
-        
+    # مرحله ۵: کامیت و پوش کردن فایل‌های خروجی با استفاده از یک اکشن اختصاصی
+    # این اکشن به صورت هوشمند بررسی می‌کند که آیا تغییری وجود دارد یا نه
+    # و تنها در صورت وجود تغییر، کامیت جدیدی ایجاد می‌کند.
+    - name: Commit and Push Changes
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        # پیامی که برای کامیت ثبت می‌شود
+        commit_message: "Update collector output [skip ci]"
+        # الگوی فایل‌هایی که باید به کامیت اضافه شوند
+        # این الگو تمام فایل‌های متنی داخل پوشه output را انتخاب می‌کند
+        file_pattern: "output/*.txt"
+        # اطلاعات کاربری که کامیت به نام او ثبت می‌شود
+        commit_user_name: "GitHub Actions Bot"
+        commit_user_email: "github-actions[bot]@users.noreply.github.com"
